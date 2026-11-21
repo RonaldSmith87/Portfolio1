@@ -19,6 +19,7 @@ private:
     void handle_remove_model();
     void handle_load_csv_file();
     void handle_load_erddap_url();
+    void handle_browse_erddap_api();
 
     size_t prompt_size_t(const std::string& prompt) const;
     double prompt_double(const std::string& prompt) const;

@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <utility>
 #include <cstddef>
 #include "Layer.h"
 
@@ -35,11 +36,17 @@ public:
     // Auto-scales raw user inputs using saved feature_min/feature_max before predicting
     std::vector<double> predict_raw(const std::vector<double>& raw_input);
 
+    // Evaluates {MSE_loss, RMSE} on a given dataset split
+    std::pair<double, double> evaluate(const std::vector<std::vector<double>>& X,
+        const std::vector<std::vector<double>>& Y);
+
     double train_step(const std::vector<double>& input, const std::vector<double>& target);
     void fit(const std::vector<std::vector<double>>& X,
         const std::vector<std::vector<double>>& Y,
         size_t epochs,
-        bool verbose = true);
+        bool verbose = true,
+        const std::vector<std::vector<double>>& X_val = {},
+        const std::vector<std::vector<double>>& Y_val = {});
 
     void save(const std::string& filepath) const;
     static NeuralNetwork load(const std::string& filepath);

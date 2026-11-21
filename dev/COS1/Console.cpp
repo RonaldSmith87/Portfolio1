@@ -1,6 +1,8 @@
 #include "Console.h"
+#include <array>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <utility>
 
 Console::Console(const std::string& models_dir)
@@ -13,7 +15,9 @@ void Console::print_menu() const {
         << (active_model.has_value() ? active_model_name + " [" + active_model->summary() + "]" : "None") << "\n";
     std::cout << " Active Dataset : "
         << (active_dataset.has_value()
-            ? std::to_string(active_dataset->X.size()) + " rows, " + std::to_string(active_dataset->num_features) + " features"
+            ? std::to_string(active_dataset->X.size()) + " train / " +
+            std::to_string(active_dataset->X_test.size()) + " val rows, " +
+            std::to_string(active_dataset->num_features) + " features"
             : "None") << "\n";
     std::cout << "========================================\n";
     std::cout << "1. Learn\n";
@@ -21,8 +25,9 @@ void Console::print_menu() const {
     std::cout << "3. Load model\n";
     std::cout << "4. Remove model\n";
     std::cout << "5. Load csv from File\n";
-    std::cout << "6. Load csv from ERDDAP URL\n";
-    std::cout << "7. Exit\n";
+    std::cout << "6. Browse & Query ERDDAP API (PMEL)\n";
+    std::cout << "7. Load csv from Direct ERDDAP URL\n";
+    std::cout << "8. Exit\n";
     std::cout << "Select an option: ";
 }
 
@@ -33,7 +38,7 @@ void Console::run() {
         if (!(std::cin >> choice)) {
             std::cin.clear();
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            std::cout << "Invalid input. Please enter a number 1-7.\n";
+            std::cout << "Invalid input. Please enter a number 1-8.\n";
             continue;
         }
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -45,9 +50,10 @@ void Console::run() {
             case 3: handle_load_model(); break;
             case 4: handle_remove_model(); break;
             case 5: handle_load_csv_file(); break;
-            case 6: handle_load_erddap_url(); break;
-            case 7: std::cout << "Exiting...\n"; return;
-            default: std::cout << "Please select a valid option (1-7).\n"; break;
+            case 6: handle_browse_erddap_api(); break;
+            case 7: handle_load_erddap_url(); break;
+            case 8: std::cout << "Exiting...\n"; return;
+            default: std::cout << "Please select a valid option (1-8).\n"; break;
             }
         }
         catch (const std::exception& ex) {
@@ -58,14 +64,15 @@ void Console::run() {
 
 void Console::handle_learn() {
     if (!active_dataset.has_value()) {
-        std::cout << "No dataset loaded. Please load a CSV file or ERDDAP URL first.\n";
+        std::cout << "No dataset loaded. Please load a CSV file or ERDDAP dataset first.\n";
         return;
     }
 
     if (active_model.has_value()) {
         std::cout << "Continuing training on loaded model: " << active_model_name << "\n";
         size_t epochs = prompt_size_t("Enter additional epochs: ");
-        active_model->fit(active_dataset->X, active_dataset->Y, epochs);
+        active_model->fit(active_dataset->X, active_dataset->Y, epochs, true,
+            active_dataset->X_test, active_dataset->Y_test);
     }
     else {
         std::cout << "No model loaded. Configuring a new neural network...\n";
@@ -77,7 +84,8 @@ void Console::handle_learn() {
             active_dataset->feature_max
         );
         size_t epochs = prompt_size_t("Enter training epochs: ");
-        nn.fit(active_dataset->X, active_dataset->Y, epochs);
+        nn.fit(active_dataset->X, active_dataset->Y, epochs, true,
+            active_dataset->X_test, active_dataset->Y_test);
         active_model = std::move(nn);
         active_model_name = "unsaved_model";
     }
@@ -99,8 +107,31 @@ void Console::handle_predict() {
 
     std::cout << "\nEnter raw feature values for prediction:\n";
     std::vector<double> raw_inputs(names.size());
-    for (size_t i = 0; i < names.size(); ++i) {
-        raw_inputs[i] = prompt_any_double("  " + names[i] + ": ");
+    for (size_t i = 0; i < names.size(); ) {
+        if (i + 3 < names.size() &&
+            names[i].size() > 9 &&
+            names[i].substr(names[i].size() - 9) == "_hour_sin") {
+            std::string base_label = names[i].substr(0, names[i].size() - 9);
+            while (true) {
+                std::cout << "  " << base_label << " (ISO-8601, e.g. 2026-11-20T19:00:00Z): ";
+                std::string dt_str;
+                std::getline(std::cin, dt_str);
+                std::array<double, 4> cyc{};
+                if (DataLoader::try_parse_iso_datetime(dt_str, cyc)) {
+                    raw_inputs[i] = cyc[0];
+                    raw_inputs[i + 1] = cyc[1];
+                    raw_inputs[i + 2] = cyc[2];
+                    raw_inputs[i + 3] = cyc[3];
+                    i += 4;
+                    break;
+                }
+                std::cout << "Invalid ISO-8601 timestamp format. Try again.\n";
+            }
+        }
+        else {
+            raw_inputs[i] = prompt_any_double("  " + names[i] + ": ");
+            ++i;
+        }
     }
 
     auto result = active_model->predict_raw(raw_inputs);
@@ -176,9 +207,117 @@ void Console::handle_load_csv_file() {
     }
 
     size_t target_col = prompt_size_t("Select target column index: ");
-    active_dataset = DataLoader::parse_csv_string(csv_text, target_col);
-    std::cout << "Dataset loaded: " << active_dataset->X.size() << " rows, "
-        << active_dataset->num_features << " numeric features -> Target: "
+    size_t lookback = prompt_size_t("Enter past time steps (lookback window, 0 for single-row): ");
+    active_dataset = DataLoader::parse_csv_string(csv_text, target_col, lookback);
+    std::cout << "Dataset loaded: " << active_dataset->X.size() << " train rows, "
+        << active_dataset->X_test.size() << " validation rows, "
+        << active_dataset->num_features << " features -> Target: "
+        << active_dataset->target_name << "\n";
+}
+
+void Console::handle_browse_erddap_api() {
+    std::cout << "ERDDAP Base URL [Enter for https://data.pmel.noaa.gov/pmel/erddap]: ";
+    std::string base_url;
+    std::getline(std::cin, base_url);
+    if (base_url.empty()) {
+        base_url = "https://data.pmel.noaa.gov/pmel/erddap";
+    }
+
+    std::cout << "Search keyword (e.g., TAO, mooring, temperature, wind, saildrone): ";
+    std::string query;
+    std::getline(std::cin, query);
+    if (query.empty()) {
+        std::cout << "Search cancelled.\n";
+        return;
+    }
+
+    std::cout << "Searching ERDDAP catalog...\n";
+    auto datasets = DataLoader::search_erddap(base_url, query);
+    if (datasets.empty()) {
+        std::cout << "No matching datasets found.\n";
+        return;
+    }
+
+    std::cout << "\nMatching Datasets:\n";
+    for (size_t i = 0; i < datasets.size(); ++i) {
+        std::cout << "  " << (i + 1) << ". [" << datasets[i].protocol << "] "
+            << datasets[i].dataset_id << " - " << datasets[i].title << "\n";
+    }
+
+    size_t ds_choice = prompt_size_t("Select dataset number (0 to cancel): ");
+    if (ds_choice == 0 || ds_choice > datasets.size()) {
+        std::cout << "Selection cancelled.\n";
+        return;
+    }
+
+    const auto& chosen_ds = datasets[ds_choice - 1];
+    std::cout << "Fetching schema for " << chosen_ds.dataset_id << "...\n";
+    auto vars = DataLoader::fetch_erddap_variables(base_url, chosen_ds.dataset_id);
+
+    std::cout << "\nAvailable Variables & Dimensions:\n";
+    for (size_t i = 0; i < vars.size(); ++i) {
+        std::cout << "  " << i << ": " << vars[i].name
+            << " (" << vars[i].row_type << ", " << vars[i].data_type << ")";
+        if (!vars[i].long_name.empty()) std::cout << " - " << vars[i].long_name;
+        if (!vars[i].units.empty()) std::cout << " [" << vars[i].units << "]";
+        std::cout << "\n";
+    }
+
+    std::cout << "\nEnter comma-separated variable indices to fetch (or 'all' for all variables): ";
+    std::string var_input;
+    std::getline(std::cin, var_input);
+
+    std::vector<std::string> selected_vars;
+    if (var_input == "all" || var_input == "ALL") {
+        for (const auto& v : vars) {
+            selected_vars.push_back(v.name);
+        }
+    }
+    else {
+        std::stringstream ss(var_input);
+        std::string item;
+        while (std::getline(ss, item, ',')) {
+            try {
+                size_t idx = std::stoul(item);
+                if (idx < vars.size()) {
+                    selected_vars.push_back(vars[idx].name);
+                }
+            }
+            catch (...) {}
+        }
+    }
+
+    if (selected_vars.empty()) {
+        std::cout << "No valid variables selected.\n";
+        return;
+    }
+
+    std::cout << "Start time ISO-8601 (e.g., 2025-01-01T00:00:00Z, or Enter for earliest): ";
+    std::string start_iso;
+    std::getline(std::cin, start_iso);
+
+    std::cout << "End time ISO-8601 (e.g., 2025-06-01T00:00:00Z, or Enter for latest): ";
+    std::string end_iso;
+    std::getline(std::cin, end_iso);
+
+    std::string query_url = DataLoader::build_erddap_query_url(
+        base_url, chosen_ds, vars, selected_vars, start_iso, end_iso);
+    std::cout << "Querying: " << query_url << "\n";
+
+    std::string csv_text = DataLoader::fetch_erddap_csv(query_url);
+    auto cols = DataLoader::extract_column_names(csv_text);
+
+    std::cout << "\nDownloaded Columns:\n";
+    for (size_t i = 0; i < cols.size(); ++i) {
+        std::cout << "  " << i << ": " << cols[i] << "\n";
+    }
+
+    size_t target_col = prompt_size_t("Select target column index: ");
+    size_t lookback = prompt_size_t("Enter past time steps (lookback window, 0 for single-row): ");
+    active_dataset = DataLoader::parse_csv_string(csv_text, target_col, lookback);
+    std::cout << "ERDDAP dataset loaded: " << active_dataset->X.size() << " train rows, "
+        << active_dataset->X_test.size() << " validation rows, "
+        << active_dataset->num_features << " features -> Target: "
         << active_dataset->target_name << "\n";
 }
 
@@ -197,9 +336,11 @@ void Console::handle_load_erddap_url() {
     }
 
     size_t target_col = prompt_size_t("Select target column index: ");
-    active_dataset = DataLoader::parse_csv_string(csv_text, target_col);
-    std::cout << "ERDDAP dataset loaded: " << active_dataset->X.size() << " rows, "
-        << active_dataset->num_features << " numeric features -> Target: "
+    size_t lookback = prompt_size_t("Enter past time steps (lookback window, 0 for single-row): ");
+    active_dataset = DataLoader::parse_csv_string(csv_text, target_col, lookback);
+    std::cout << "ERDDAP dataset loaded: " << active_dataset->X.size() << " train rows, "
+        << active_dataset->X_test.size() << " validation rows, "
+        << active_dataset->num_features << " features -> Target: "
         << active_dataset->target_name << "\n";
 }
 

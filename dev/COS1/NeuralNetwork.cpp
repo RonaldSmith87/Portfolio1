@@ -4,6 +4,8 @@
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
+#include <cmath>
+#include <utility>
 
 NeuralNetwork::NeuralNetwork(double lr) : learning_rate(lr) {}
 
@@ -49,6 +51,29 @@ std::vector<double> NeuralNetwork::predict_raw(const std::vector<double>& raw_in
     return predict(scaled);
 }
 
+std::pair<double, double> NeuralNetwork::evaluate(const std::vector<std::vector<double>>& X,
+    const std::vector<std::vector<double>>& Y) {
+    if (X.empty() || X.size() != Y.size()) return { 0.0, 0.0 };
+
+    double total_loss = 0.0;
+    double total_sq_err = 0.0;
+    size_t total_elements = 0;
+
+    for (size_t i = 0; i < X.size(); ++i) {
+        std::vector<double> output = predict(X[i]);
+        for (size_t j = 0; j < output.size(); ++j) {
+            double error = output[j] - Y[i][j];
+            total_loss += 0.5 * error * error;
+            total_sq_err += error * error;
+            ++total_elements;
+        }
+    }
+
+    double avg_loss = total_loss / static_cast<double>(X.size());
+    double rmse = (total_elements > 0) ? std::sqrt(total_sq_err / static_cast<double>(total_elements)) : 0.0;
+    return { avg_loss, rmse };
+}
+
 double NeuralNetwork::train_step(const std::vector<double>& input, const std::vector<double>& target) {
     std::vector<double> output = predict(input);
     if (output.size() != target.size()) {
@@ -73,15 +98,26 @@ double NeuralNetwork::train_step(const std::vector<double>& input, const std::ve
 void NeuralNetwork::fit(const std::vector<std::vector<double>>& X,
     const std::vector<std::vector<double>>& Y,
     size_t epochs,
-    bool verbose) {
+    bool verbose,
+    const std::vector<std::vector<double>>& X_val,
+    const std::vector<std::vector<double>>& Y_val) {
+    bool has_val = !X_val.empty() && X_val.size() == Y_val.size();
+
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         double total_loss = 0.0;
         for (size_t i = 0; i < X.size(); ++i) {
             total_loss += train_step(X[i], Y[i]);
         }
+
         if (verbose && (epoch % 500 == 0 || epoch == epochs - 1)) {
             std::cout << "Epoch " << epoch + 1 << "/" << epochs
-                << " - Loss: " << (total_loss / X.size()) << "\n";
+                << " - Train Loss: " << (total_loss / X.size());
+            if (has_val) {
+                auto [val_loss, val_rmse] = evaluate(X_val, Y_val);
+                std::cout << " | Val Loss: " << val_loss
+                    << " (Val RMSE: " << val_rmse << " " << target_name << ")";
+            }
+            std::cout << "\n";
         }
     }
 }
