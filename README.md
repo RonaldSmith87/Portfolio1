@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 
 ````
+=======
+>>>>>>> 9dbd386b138d93e5954984935f26630c5ceac13e
 # Portfolio1 — C++ Time-Series Neural Network & ERDDAP Client
 
 A zero-dependency C++ console application for oceanographic and environmental time-series forecasting. Built from scratch in native C++ using Windows WinHTTP, it connects directly to **NOAA PMEL ERDDAP** (and any standard ERDDAP server) to search catalogs, inspect dataset schemas, engineer cyclical time and sliding-window lag features, train configurable Multi-Layer Perceptrons (MLPs), and persist self-contained `.nn` models.
@@ -37,6 +40,7 @@ Portfolio1/
 │   ├── Layer.h / .cpp        # Dense layer implementation & activation functions (ReLU, Sigmoid, Tanh, Linear)
 │   └── ModelManager.h / .cpp # Disk listing, loading, and deletion of saved .nn models
 └── models/                   # Saved .nn model files (created at runtime)
+<<<<<<< HEAD
 ````
 
 ## Build Instructions (Windows / Visual Studio)
@@ -91,6 +95,13 @@ Portfolio1/
 - [ ] Optional learning-rate decay and mini-batch / epoch shuffling for non-sequential tabular datasets
     
 - [ ] Export validation predictions vs. actuals to CSV for external plotting
+=======
+Build Instructions (Windows / Visual Studio)PrerequisitesOS: Windows 10 or Windows 11 (uses native winhttp.lib)IDE / Compiler: Visual Studio 2022 with the Desktop development with C++ workload (C++17 or newer)BuildingClone the repository:Bashgit clone [https://github.com/RonaldSmith87/Portfolio1.git](https://github.com/RonaldSmith87/Portfolio1.git)
+Open COS1.sln in Visual Studio.Set the solution configuration to Release and platform to x64.Build the solution via Build > Build Solution (Ctrl+Shift+B) and run (Ctrl+F5).Note for Windows 11 Users: If Windows Smart App Control blocks unsigned local builds, add a folder exclusion for your build output directory in Windows Security > Virus & threat protection > Exclusions.Quick-Start Walkthrough (PMEL ERDDAP)Launch COS1.exe and select Option 6 (Browse & Query ERDDAP API (PMEL)).Press Enter to accept the default server (https://data.pmel.noaa.gov/pmel/erddap), then enter a search term such as TAO or temperature.Select a dataset from the numbered list, inspect its variables/units, and enter the comma-separated variable indices you want to fetch (or all).Provide a bounded ISO-8601 date range (e.g., 2024-01-01T00:00:00Z to 2024-02-01T00:00:00Z) to keep the query fast, then select your target column index and lookback window (e.g., 3–5 steps).Select Option 1 (Learn) to configure and train your network:Recommended Regression Setup: Learning rate 0.01–0.05, 1–2 hidden layers with Tanh (3) activation, and Linear (4) activation on the output layer so predictions are not bounded to $[0, 1]$.Save the trained .nn model when prompted, then use Option 2 (Predict) or Option 3 (Load model) anytime for standalone inference.Roadmap[ ] Auto-compute lagged cyclical timestamps in Predict from a single target timestamp and sampling interval[ ] Optional learning-rate decay and mini-batch / epoch shuffling for non-sequential tabular datasets[ ] Export validation predictions vs. actuals to CSV for external plotting
+
+```
+
+>>>>>>> 9dbd386b138d93e5954984935f26630c5ceac13e
 
 # 🚀 Welcome to Project & Portfolio!
 
@@ -118,7 +129,7 @@ After completing the above steps, feel free to begin updating this readme where 
 
 ### Student First & Last Name
 
-Hello my name is [enter name]. I am a student from [where are you from?]. The purpose of this repository is to practice development using version control. This work will help me begin to build a portfolio of skills and accomplishment that can be shared in the future.
+Hello my name is Ron Smith. I am a student from Washington State. The purpose of this repository is to practice development using version control. This work will help me begin to build a portfolio of skills and accomplishment that can be shared in the future.
 
 <br>
 
